@@ -6,27 +6,76 @@ class BottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BottomNavigationBar(
-      currentIndex: currentIndex,
-      onTap: (index) {
-        switch (index) {
-          case 0:
-            Navigator.pushReplacementNamed(context, '/antrian');
-            break;
-          case 1:
-            Navigator.pushReplacementNamed(context, '/histori');
-            break;
-          case 2:
-            Navigator.pushReplacementNamed(context, '/stok');
-            break;
-        }
-      },
-      items: const [
-        BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Antrian'),
-        BottomNavigationBarItem(icon: Icon(Icons.history), label: 'Histori'),
-        BottomNavigationBarItem(
-            icon: Icon(Icons.medication), label: 'Stok Obat'),
-      ],
+    // Menggunakan Container untuk memberikan background dan border radius
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white, // Warna latar belakang nav bar
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.3),
+            spreadRadius: 2,
+            blurRadius: 15,
+            offset: const Offset(0, 5), // changes position of shadow
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
+        ),
+        child: BottomNavigationBar(
+          currentIndex: currentIndex,
+          onTap: (index) {
+            // Logika navigasi tidak berubah, sudah benar
+            switch (index) {
+              case 0:
+                if (currentIndex != 0)
+                  Navigator.pushReplacementNamed(context, '/antrian');
+                break;
+              case 1:
+                if (currentIndex != 1)
+                  Navigator.pushReplacementNamed(context, '/histori');
+                break;
+              case 2:
+                if (currentIndex != 2)
+                  Navigator.pushReplacementNamed(context, '/stok');
+                break;
+            }
+          },
+          // --- PENYESUAIAN STYLE DI SINI ---
+          backgroundColor: Colors
+              .transparent, // Dibuat transparan agar warna Container terlihat
+          elevation: 0, // Shadow diatur oleh Container, jadi ini di-nol-kan
+          type: BottomNavigationBarType.fixed, // Tipe agar item tidak bergeser
+          selectedItemColor: Colors.indigo[800], // Warna untuk item yang aktif
+          unselectedItemColor:
+              Colors.grey[600], // Warna untuk item yang tidak aktif
+          selectedFontSize: 12,
+          unselectedFontSize: 12,
+          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
+
+          items: const [
+            // Ikon disesuaikan agar lebih cocok dengan desain
+            BottomNavigationBarItem(
+                icon: Icon(Icons.groups_outlined),
+                activeIcon: Icon(Icons.groups),
+                label: 'Antrean'),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.receipt_long_outlined),
+                activeIcon: Icon(Icons.receipt_long),
+                label: 'Histori'),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.inventory_2_outlined),
+                activeIcon: Icon(Icons.inventory_2),
+                label: 'Stok Obat'),
+          ],
+        ),
+      ),
     );
   }
 }
