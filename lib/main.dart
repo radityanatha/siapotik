@@ -7,24 +7,16 @@ import 'screens/login_screen.dart';
 import 'screens/antrian_screen.dart';
 import 'screens/histori_screen.dart';
 import 'screens/stok_obat_screen.dart';
-import 'http_overrides.dart'; // Jika Anda masih menggunakannya
+import 'http_overrides.dart';
+import 'services/auth_service.dart';
 
-// --- PERBAIKAN DI SINI ---
 void main() async {
-  // 1. Jadikan fungsi main menjadi async
-
-  // 2. Pastikan binding Flutter sudah siap sebelum menjalankan kode lain
   WidgetsFlutterBinding.ensureInitialized();
-
-  // 3. Muat data lokalisasi untuk format tanggal dan tunggu hingga selesai
   await initializeDateFormatting('id_ID', null);
-
-  // Baris ini opsional, hanya jika Anda masih mengalami masalah sertifikat SSL
   HttpOverrides.global = MyHttpOverrides();
 
   runApp(const MyApp());
 }
-// --- AKHIR PERBAIKAN ---
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -35,10 +27,8 @@ class MyApp extends StatelessWidget {
       title: 'SIaPotik',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-          // Mengganti ke indigo agar lebih serasi dengan tema aplikasi Anda
           primarySwatch: Colors.indigo,
           useMaterial3: true,
-          // Memberi warna latar belakang yang lebih lembut dan modern
           scaffoldBackgroundColor: const Color(0xFFF4F6F8),
           appBarTheme: const AppBarTheme(
             backgroundColor: Colors.transparent,

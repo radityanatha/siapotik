@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:intl/intl.dart';
 
 import '../models/antrian.dart';
 import '../models/resep_detail.dart';
 import '../widgets/bottom_nav.dart';
+import '../widgets/error_widget.dart';
+import '../services/api_service.dart';
+import '../services/auth_service.dart';
 
 // --- WIDGET UNTUK SETIAP BARIS ANTRIAN (Expandable) ---
 class AntrianRow extends StatefulWidget {
@@ -222,21 +224,10 @@ class _AntrianScreenState extends State<AntrianScreen> {
     });
 
     try {
-      final antrianUrl =
-          Uri.parse('https://ti054a04.agussbn.my.id/api/petugas/antrean');
-      final antrianResponse =
-          await http.get(antrianUrl).timeout(const Duration(seconds: 20));
+      print('🔄 Memulai fetch data antrian...');
+      final List<Map<String, dynamic>> rawAntrianList = await ApiService.getAntrianList();
 
-      if (antrianResponse.statusCode != 200) {
-        throw Exception(
-            'Gagal mengambil daftar antrian. Status: ${antrianResponse.statusCode}');
-      }
-
-      final Map<String, dynamic> antrianResponseData =
-          json.decode(antrianResponse.body);
-      if (antrianResponseData['data'] == null ||
-          antrianResponseData['data'] is! List ||
-          (antrianResponseData['data'] as List).isEmpty) {
+      if (rawAntrianList.isEmpty) {
         setState(() {
           _isLoading = false;
           _errorMessage = 'Saat ini tidak ada antrian resep.';
@@ -244,9 +235,7 @@ class _AntrianScreenState extends State<AntrianScreen> {
         return;
       }
 
-      List<dynamic> rawAntrianList = antrianResponseData['data'];
       List<Future<Antrian>> futures = [];
-
       for (var antrianJson in rawAntrianList) {
         futures.add(_fetchDetailForAntrian(antrianJson));
       }
@@ -258,50 +247,43 @@ class _AntrianScreenState extends State<AntrianScreen> {
         _isLoading = false;
         _errorMessage = '';
       });
-    } catch (e, stacktrace) {
-      print('--- ERROR START ---');
-      print('Error saat fetchAndCombineData: $e');
-      print('Stacktrace: $stacktrace');
-      print('--- ERROR END ---');
+
+      print('✅ Berhasil memuat ${antrianList.length} data antrian');
+    } catch (e) {
+      print('❌ Error saat fetch data antrian: $e');
       setState(() {
         _isLoading = false;
-        _errorMessage = "Gagal memproses data.\n\nError: ${e.toString()}";
+        _errorMessage = "Gagal memproses data antrian: ${e.toString()}";
       });
     }
   }
 
-  Future<Antrian> _fetchDetailForAntrian(
-      Map<String, dynamic> antrianJson) async {
+  Future<Antrian> _fetchDetailForAntrian(Map<String, dynamic> antrianJson) async {
     final int resepId = antrianJson['id_resep'];
-    final detailUrl = Uri.parse(
-        'https://ti054a04.agussbn.my.id/api/petugas/detail-antrean/$resepId');
-    final detailResponse = await http.get(detailUrl);
 
-    List<ResepDetail> details = [];
-    if (detailResponse.statusCode == 200) {
-      final dynamic detailResponseDecoded = json.decode(detailResponse.body);
-      List<dynamic> resepDetailsData;
+    try {
+      final List<Map<String, dynamic>> detailListJson = await ApiService.getAntrianDetail(resepId);
+      final List<ResepDetail> details = detailListJson.map((json) => ResepDetail.fromJson(json)).toList();
 
-      if (detailResponseDecoded is Map<String, dynamic> &&
-          detailResponseDecoded['data'] is List) {
-        resepDetailsData = detailResponseDecoded['data'];
-      } else if (detailResponseDecoded is List) {
-        resepDetailsData = detailResponseDecoded;
-      } else {
-        resepDetailsData = [];
-      }
-      details =
-          resepDetailsData.map((json) => ResepDetail.fromJson(json)).toList();
+      return Antrian(
+        idResep: resepId,
+        noRegistrasi: antrianJson['no_registrasi']?.toString() ?? 'N/A',
+        totalKeseluruhan: double.tryParse(
+                antrianJson['total_keseluruhan']?.toString() ?? '0.0') ??
+            0.0,
+        details: details,
+      );
+    } catch (e) {
+      print('❌ Error saat fetch detail antrian $resepId: $e');
+      return Antrian(
+        idResep: resepId,
+        noRegistrasi: antrianJson['no_registrasi']?.toString() ?? 'N/A',
+        totalKeseluruhan: double.tryParse(
+                antrianJson['total_keseluruhan']?.toString() ?? '0.0') ??
+            0.0,
+        details: [],
+      );
     }
-
-    return Antrian(
-      idResep: resepId,
-      noRegistrasi: antrianJson['no_registrasi']?.toString() ?? 'N/A',
-      totalKeseluruhan: double.tryParse(
-              antrianJson['total_keseluruhan']?.toString() ?? '0.0') ??
-          0.0,
-      details: details,
-    );
   }
 
   @override
@@ -316,7 +298,15 @@ class _AntrianScreenState extends State<AntrianScreen> {
                 const SnackBar(content: Text('Fitur Profil belum tersedia')),
               );
             } else if (value == 'logout') {
+              // Logout dan redirect ke login
+              AuthService.logout();
               Navigator.pushReplacementNamed(context, '/login');
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Logout berhasil'),
+                  backgroundColor: Colors.green,
+                ),
+              );
             }
           },
           itemBuilder: (context) => const [
@@ -358,16 +348,10 @@ class _AntrianScreenState extends State<AntrianScreen> {
                 child: _isLoading
                     ? const Center(child: CircularProgressIndicator())
                     : _errorMessage.isNotEmpty
-                        ? Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: Text(
-                                _errorMessage,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                    color: Colors.red, fontSize: 16),
-                              ),
-                            ),
+                        ? CustomErrorWidget(
+                            errorMessage: _errorMessage,
+                            onRetry: fetchAndCombineData,
+                            title: 'Gagal Memuat Data Antrian',
                           )
                         : RefreshIndicator(
                             onRefresh: fetchAndCombineData,

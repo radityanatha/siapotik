@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:intl/intl.dart';
 
 import '../models/riwayat.dart';
 import '../models/resep_detail.dart';
 import '../widgets/bottom_nav.dart';
+import '../widgets/error_widget.dart';
+import '../services/api_service.dart';
 
 class HistoriScreen extends StatefulWidget {
   const HistoriScreen({super.key});
@@ -33,23 +34,9 @@ class _HistoriScreenState extends State<HistoriScreen> {
     });
 
     try {
-      final riwayatUrl =
-          Uri.parse('https://ti054a04.agussbn.my.id/api/petugas/riwayat');
-      final riwayatResponse =
-          await http.get(riwayatUrl).timeout(const Duration(seconds: 20));
+      print('🔄 Memulai fetch data riwayat...');
+      final List<Map<String, dynamic>> rawRiwayatList = await ApiService.getRiwayatList();
 
-      if (riwayatResponse.statusCode != 200) {
-        throw Exception(
-            'Gagal memuat riwayat. Status: ${riwayatResponse.statusCode}');
-      }
-
-      final Map<String, dynamic> riwayatData =
-          json.decode(riwayatResponse.body);
-      if (riwayatData['data'] == null || riwayatData['data'] is! List) {
-        throw Exception('Format data riwayat tidak valid.');
-      }
-
-      List<dynamic> rawRiwayatList = riwayatData['data'];
       if (rawRiwayatList.isEmpty) {
         setState(() {
           _isLoading = false;
@@ -64,77 +51,59 @@ class _HistoriScreenState extends State<HistoriScreen> {
       }
 
       final List<Riwayat> completedRiwayat = await Future.wait(futures);
-
-      completedRiwayat
-          .sort((a, b) => b.tanggalSelesai.compareTo(a.tanggalSelesai));
+      completedRiwayat.sort((a, b) => b.tanggalSelesai.compareTo(a.tanggalSelesai));
 
       setState(() {
         _riwayatList = completedRiwayat;
         _isLoading = false;
       });
-    } catch (e, stacktrace) {
-      print('Error fetching riwayat: $e');
-      print(stacktrace);
+
+      print('✅ Berhasil memuat ${_riwayatList.length} data riwayat');
+    } catch (e) {
+      print('❌ Error saat fetch data riwayat: $e');
       setState(() {
         _isLoading = false;
-        _errorMessage = e.toString();
+        _errorMessage = 'Gagal memuat data riwayat: $e';
       });
     }
   }
 
-  Future<Riwayat> _fetchDetailsForRiwayat(
-      Map<String, dynamic> riwayatJson) async {
+  Future<Riwayat> _fetchDetailsForRiwayat(Map<String, dynamic> riwayatJson) async {
     final int resepId = riwayatJson['id_resep'];
     List<ResepDetail> details = [];
     String noRegistrasi = 'N/A';
     double totalKeseluruhan = 0.0;
 
     try {
-      final antrianUrl =
-          Uri.parse('https://ti054a04.agussbn.my.id/api/petugas/antrean');
-      final antrianResponse = await http.get(antrianUrl);
-      if (antrianResponse.statusCode == 200) {
-        final Map<String, dynamic> antrianData =
-            json.decode(antrianResponse.body);
-        if (antrianData['data'] is List) {
-          final antrianInfo = (antrianData['data'] as List)
-              .firstWhere((a) => a['id_resep'] == resepId, orElse: () => null);
-          if (antrianInfo != null) {
-            noRegistrasi = antrianInfo['no_registrasi']?.toString() ?? 'N/A';
-            totalKeseluruhan = double.tryParse(
-                    antrianInfo['total_keseluruhan']?.toString() ?? '0.0') ??
-                0.0;
-          }
+      // Fetch detail resep
+      final List<Map<String, dynamic>> detailListJson = await ApiService.getAntrianDetail(resepId);
+      details = detailListJson.map((json) => ResepDetail.fromJson(json)).toList();
+
+      // Coba ambil info antrian untuk mendapatkan no_registrasi dan total
+      try {
+        final List<Map<String, dynamic>> antrianList = await ApiService.getAntrianList();
+        final antrianInfo = antrianList.firstWhere(
+          (a) => a['id_resep'] == resepId,
+          orElse: () => <String, dynamic>{},
+        );
+
+        if (antrianInfo.isNotEmpty) {
+          noRegistrasi = antrianInfo['no_registrasi']?.toString() ?? 'N/A';
+          totalKeseluruhan = double.tryParse(
+                  antrianInfo['total_keseluruhan']?.toString() ?? '0.0') ??
+              0.0;
         }
+      } catch (e) {
+        print('⚠️ Tidak bisa mengambil info antrian untuk resepId $resepId: $e');
       }
-    } catch (e) {
-      print("Could not fetch antrian data for resepId $resepId: $e");
-    }
 
-    try {
-      final detailUrl = Uri.parse(
-          'https://ti054a04.agussbn.my.id/api/petugas/detail-antrean/$resepId');
-      final detailResponse = await http.get(detailUrl);
-
-      if (detailResponse.statusCode == 200) {
-        final dynamic detailData = json.decode(detailResponse.body);
-        List<dynamic> detailList;
-        if (detailData is Map<String, dynamic> && detailData['data'] is List) {
-          detailList = detailData['data'];
-        } else if (detailData is List) {
-          detailList = detailData;
-        } else {
-          detailList = [];
-        }
-        details = detailList.map((json) => ResepDetail.fromJson(json)).toList();
-
-        if (totalKeseluruhan == 0.0 && details.isNotEmpty) {
-          totalKeseluruhan =
-              details.fold(0.0, (sum, item) => sum + item.totalHarga);
-        }
+      // Jika total masih 0, hitung dari detail
+      if (totalKeseluruhan == 0.0 && details.isNotEmpty) {
+        totalKeseluruhan = details.fold(0.0, (sum, item) => sum + item.totalHarga);
       }
+
     } catch (e) {
-      print("Could not fetch detail data for resepId $resepId: $e");
+      print('❌ Error saat fetch detail riwayat $resepId: $e');
     }
 
     return Riwayat(
@@ -163,7 +132,11 @@ class _HistoriScreenState extends State<HistoriScreen> {
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : _errorMessage.isNotEmpty
-                ? Center(child: Text('Error: $_errorMessage'))
+                ? CustomErrorWidget(
+                    errorMessage: _errorMessage,
+                    onRetry: _fetchCombinedRiwayat,
+                    title: 'Gagal Memuat Data Riwayat',
+                  )
                 : RefreshIndicator(
                     onRefresh: _fetchCombinedRiwayat,
                     child: ListView.builder(

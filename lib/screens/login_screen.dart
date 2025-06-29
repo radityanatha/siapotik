@@ -14,17 +14,59 @@ class _LoginScreenState extends State<LoginScreen> {
   final authService = AuthService();
 
   bool _obscureText = true;
+  bool _isLoading = false;
 
   void handleLogin() async {
-    String email = userC.text;
-    String password = passC.text;
+    String username = userC.text.trim();
+    String password = passC.text.trim();
 
-    if (email == 'petugas1@gmail.com' && password == 'petugas123') {
-      Navigator.pushReplacementNamed(context, '/antrian');
-    } else {
+    // Validasi input
+    if (username.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Email atau password salah')),
+        const SnackBar(
+          content: Text('Username dan password harus diisi'),
+          backgroundColor: Colors.red,
+        ),
       );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      print('🔐 Attempting login...');
+      final response = await authService.login(username, password);
+
+      print('✅ Login successful: $response');
+
+      // Cek apakah login berhasil
+      if (AuthService.isLoggedIn) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Login berhasil!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        // Navigate ke halaman utama
+        Navigator.pushReplacementNamed(context, '/antrian');
+      } else {
+        throw Exception('Login gagal: Token tidak diterima');
+      }
+    } catch (e) {
+      print('❌ Login error: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Login gagal: ${e.toString().replaceAll('Exception: ', '')}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
@@ -73,6 +115,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               const SizedBox(height: 32),
                               TextField(
                                 controller: userC,
+                                enabled: !_isLoading,
                                 decoration: InputDecoration(
                                   hintText: 'Username',
                                   prefixIcon: const Icon(Icons.person),
@@ -87,6 +130,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               const SizedBox(height: 16),
                               TextField(
                                 controller: passC,
+                                enabled: !_isLoading,
                                 obscureText: _obscureText,
                                 decoration: InputDecoration(
                                   hintText: 'Password',
@@ -116,20 +160,38 @@ class _LoginScreenState extends State<LoginScreen> {
                                 width: double.infinity,
                                 height: 50,
                                 child: ElevatedButton(
-                                  onPressed: handleLogin,
+                                  onPressed: _isLoading ? null : handleLogin,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.deepPurple,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                   ),
-                                  child: const Text(
-                                    "Sign in",
-                                    style: TextStyle(
-                                        fontSize: 16, color: Colors.white),
-                                  ),
+                                  child: _isLoading
+                                      ? const SizedBox(
+                                          height: 20,
+                                          width: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                          ),
+                                        )
+                                      : const Text(
+                                          "Sign in",
+                                          style: TextStyle(
+                                              fontSize: 16, color: Colors.white),
+                                        ),
                                 ),
                               ),
+                              const SizedBox(height: 16),
+                              if (_isLoading)
+                                const Text(
+                                  'Sedang login...',
+                                  style: TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 12,
+                                  ),
+                                ),
                             ],
                           ),
                         ),

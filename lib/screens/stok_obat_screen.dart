@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:intl/intl.dart';
 import '../models/obat.dart';
 import '../widgets/bottom_nav.dart';
+import '../widgets/error_widget.dart';
+import '../services/api_service.dart';
 
 class StokObatScreen extends StatefulWidget {
   const StokObatScreen({super.key});
@@ -44,28 +45,30 @@ class _StokObatScreenState extends State<StokObatScreen> {
     });
 
     try {
-      final url = Uri.parse('https://ti054a04.agussbn.my.id/api/admin/obat');
-      final response = await http.get(url).timeout(const Duration(seconds: 20));
+      print('🔄 Memulai fetch data obat...');
+      final List<Map<String, dynamic>> obatListJson = await ApiService.getObatList();
 
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> responseData = json.decode(response.body);
-        if (responseData['data'] != null && responseData['data'] is List) {
-          final List<dynamic> obatListJson = responseData['data'];
-          setState(() {
-            _allObat = obatListJson.map((json) => Obat.fromJson(json)).toList();
-            _filteredObat = _allObat;
-            _isLoading = false;
-          });
-        } else {
-          throw Exception('Format data obat tidak valid.');
-        }
-      } else {
-        throw Exception('Gagal memuat data. Status: ${response.statusCode}');
+      if (obatListJson.isEmpty) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Tidak ada data obat tersedia.';
+        });
+        return;
       }
+
+      setState(() {
+        _allObat = obatListJson.map((json) => Obat.fromJson(json)).toList();
+        _filteredObat = _allObat;
+        _isLoading = false;
+        _errorMessage = '';
+      });
+
+      print('✅ Berhasil memuat ${_allObat.length} data obat');
     } catch (e) {
+      print('❌ Error saat fetch data obat: $e');
       setState(() {
         _isLoading = false;
-        _errorMessage = e.toString();
+        _errorMessage = 'Gagal memuat data obat: $e';
       });
     }
   }
@@ -122,7 +125,11 @@ class _StokObatScreenState extends State<StokObatScreen> {
                 child: _isLoading
                     ? const Center(child: CircularProgressIndicator())
                     : _errorMessage.isNotEmpty
-                        ? Center(child: Text('Error: $_errorMessage'))
+                        ? CustomErrorWidget(
+                            errorMessage: _errorMessage,
+                            onRetry: _fetchObatData,
+                            title: 'Gagal Memuat Data Obat',
+                          )
                         : RefreshIndicator(
                             onRefresh: _fetchObatData,
                             child: ListView.builder(
